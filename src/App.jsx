@@ -1,68 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Lock, Unlock, ChevronLeft, Save, X, ArrowUpDown, ArrowUp, ArrowDown, GripVertical, Trophy, Check } from 'lucide-react';
-
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-// Penalty Codes
-const PENALTY_CODES = {
-  DNF: 'DNF',  // Did Not Finish
-  DNS: 'DNS',  // Did Not Start
-  DNC: 'DNC',  // Did Not Compete
-  DSQ: 'DSQ'   // Disqualified
-};
-
-// Penalty Order (for sorting)
-const PENALTY_ORDER = {
-  [PENALTY_CODES.DNF]: 0,
-  [PENALTY_CODES.DNS]: 1,
-  [PENALTY_CODES.DNC]: 2,
-  [PENALTY_CODES.DSQ]: 3
-};
-
-// Penalty Labels (human-readable)
-const PENALTY_LABELS = {
-  [PENALTY_CODES.DNF]: 'Did Not Finish',
-  [PENALTY_CODES.DNS]: 'Did Not Start',
-  [PENALTY_CODES.DNC]: 'Did Not Compete',
-  [PENALTY_CODES.DSQ]: 'Disqualified'
-};
-
-// View Names
-const VIEWS = {
-  OVERVIEW: 'overview',
-  REGATTA_DETAIL: 'regattaDetail',
-  CREATE_REGATTA: 'createRegatta',
-  EDIT_REGATTA: 'editRegatta',
-  EDIT_BOAT: 'editBoat',
-  WERTUNG: 'wertung',
-  WETTFAHRTEN_OVERVIEW: 'wettfahrtenOverview',
-  ZIELERFASSUNG: 'zielerfassung',
-  ERGEBNISSE: 'ergebnisseView'
-};
-
-// Navigation Items
-const NAV_ITEMS = {
-  ORGANISATION: 'organisation',
-  WERTUNG: 'wertung'
-};
-
-// Storage Keys
-const STORAGE_KEYS = {
-  REGATTAS: 'regattas',
-  BOATS: 'boats',
-  WETTFAHRTEN: 'wettfahrten',
-  ERGEBNISSE: 'ergebnisse'
-};
-
-// UI Constants
-const UI = {
-  MIN_TOUCH_HEIGHT: 44,
-  MIN_BUTTON_HEIGHT: 48,
-  SCROLL_DELAY: 100,
-  DEBOUNCE_DELAY: 300
-};
+import { PENALTY_CODES, PENALTY_ORDER, VIEWS, NAV_ITEMS, STORAGE_KEYS, UI, VALIDATION_ERRORS, VALIDATION_MESSAGES } from './constants';
 
 // ============================================================================
 // DESIGN SYSTEM - Visual Design Tokens
@@ -158,26 +96,6 @@ const getButtonClass = (variant = 'primary', size = 'medium') => {
 
 const getInputClass = (hasError = false) => {
   return `${DESIGN_TOKENS.input.base} ${hasError ? DESIGN_TOKENS.input.error : ''}`;
-};
-
-// Validation Error Types
-const VALIDATION_ERRORS = {
-  BOATS_MISSING: 'BOATS_MISSING',
-  SEGELNUMMER_REQUIRED: 'SEGELNUMMER_REQUIRED',
-  SEGELNUMMER_EXISTS: 'SEGELNUMMER_EXISTS',
-  SEGELNUMMER_INVALID: 'SEGELNUMMER_INVALID',
-  ALL_FIELDS_REQUIRED: 'ALL_FIELDS_REQUIRED',
-  WETTFAHRT_INCOMPLETE: 'WETTFAHRT_INCOMPLETE'
-};
-
-// Validation Messages
-const VALIDATION_MESSAGES = {
-  [VALIDATION_ERRORS.BOATS_MISSING]: 'Wertung kann nicht abgeschlossen werden!',
-  [VALIDATION_ERRORS.SEGELNUMMER_REQUIRED]: 'Segelnummer ist erforderlich',
-  [VALIDATION_ERRORS.SEGELNUMMER_EXISTS]: 'Diese Segelnummer existiert bereits',
-  [VALIDATION_ERRORS.SEGELNUMMER_INVALID]: 'Segelnummer enthält ungültige Zeichen',
-  [VALIDATION_ERRORS.ALL_FIELDS_REQUIRED]: 'Bitte alle Felder ausfüllen',
-  [VALIDATION_ERRORS.WETTFAHRT_INCOMPLETE]: 'Die Wettfahrt ist noch nicht vollständig'
 };
 
 // Medal Emojis
