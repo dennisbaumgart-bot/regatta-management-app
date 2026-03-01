@@ -6,13 +6,14 @@
 export const VIEWS = {
   OVERVIEW: 'overview',
   REGATTA_DETAIL: 'regattaDetail',
-  REGATTA_FORM: 'regattaForm',
+  CREATE_REGATTA: 'createRegatta',
+  EDIT_REGATTA: 'editRegatta',
   EDIT_BOAT: 'editBoat',
   WETTFAHRTEN_OVERVIEW: 'wettfahrtenOverview',
   EDIT_WETTFAHRT: 'editWettfahrt',
   ZIELERFASSUNG: 'zielerfassung',
-  ERGEBNISSE: 'ergebnisse',
-  WERTUNG_OVERVIEW: 'wertungOverview'
+  ERGEBNISSE: 'ergebnisseView',
+  WERTUNG: 'wertung'
 };
 
 /**
@@ -21,4 +22,13 @@ export const VIEWS = {
 export const NAV_ITEMS = {
   ORGANISATION: 'organisation',
   WERTUNG: 'wertung'
+};
+
+/**
+ * Regatta status values
+ */
+export const REGATTA_STATUS = {
+  VORBEREITUNG: 'vorbereitung',
+  AKTIV: 'aktiv',
+  ABGESCHLOSSEN: 'abgeschlossen'
 };

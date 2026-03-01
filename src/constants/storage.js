@@ -6,6 +6,7 @@
 export const STORAGE_KEYS = {
   REGATTAS: 'regattas',
   WETTFAHRTEN: 'wettfahrten',
-  BOOTE: 'boote',
-  ERGEBNISSE: 'ergebnisse'
+  BOATS: 'boats',
+  ERGEBNISSE: 'ergebnisse',
+  STREICHER: 'streicher'
 };

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Lock, Unlock, ChevronLeft, Save, X, ArrowUpDown, ArrowUp, ArrowDown, GripVertical, Trophy, Check } from 'lucide-react';
-import { PENALTY_CODES, PENALTY_ORDER, VIEWS, NAV_ITEMS, STORAGE_KEYS, UI, VALIDATION_ERRORS, VALIDATION_MESSAGES } from './constants';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Lock, Unlock, ChevronLeft, Save, X, Trophy, Check } from 'lucide-react';
+import { PENALTY_CODES, PENALTY_ORDER, VIEWS, NAV_ITEMS, STORAGE_KEYS, UI, VALIDATION_ERRORS, VALIDATION_MESSAGES, REGATTA_STATUS } from './constants';
 
 // ============================================================================
 // DESIGN SYSTEM - Visual Design Tokens
@@ -88,14 +88,8 @@ const DESIGN_TOKENS = {
 /**
  * Helper Functions für häufige Kombinationen
  */
-const getCardClass = () => DESIGN_TOKENS.card.full;
-
 const getButtonClass = (variant = 'primary', size = 'medium') => {
   return `${DESIGN_TOKENS.button.base} ${DESIGN_TOKENS.button[variant]} ${DESIGN_TOKENS.button.padding[size]}`;
-};
-
-const getInputClass = (hasError = false) => {
-  return `${DESIGN_TOKENS.input.base} ${hasError ? DESIGN_TOKENS.input.error : ''}`;
 };
 
 // Medal Emojis
@@ -690,228 +684,231 @@ const ValidationErrorBanner = ({
   );
 };
 
+
 // ---------------------------------------------------------------------------
-// RegattaDetail Components
+// App-level Components (moved outside RegattaApp to prevent recreation on render)
 // ---------------------------------------------------------------------------
 
-/**
- * Header card with regatta info and status badge
- */
-const RegattaInfoCard = ({ regatta, onEdit }) => {
-  const statusConfig = {
-    aktiv: { badge: 'bg-green-100 text-green-800', emoji: '🟢', label: 'Aktiv' },
-    abgeschlossen: { badge: 'bg-gray-100 text-gray-800', emoji: '⚫', label: 'Abgeschlossen' },
-    vorbereitung: { badge: 'bg-yellow-100 text-yellow-800', emoji: '🟡', label: 'In Vorbereitung' }
-  };
-  
-  const status = statusConfig[regatta.status] || statusConfig.vorbereitung;
+const PullToRefreshIndicator = ({ pullToRefreshDistance, isRefreshing }) => {
+  if (pullToRefreshDistance === 0 && !isRefreshing) return null;
+
+  const isReady = pullToRefreshDistance > 80;
+  const rotation = Math.min(pullToRefreshDistance * 3, 360);
 
   return (
-    <div className={getCardClass()}>
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h1 className={`${DESIGN_TOKENS.text.h1} mb-2`}>{regatta.name}</h1>
-          <div className={`${DESIGN_TOKENS.text.small} text-gray-600 space-y-1`}>
-            {regatta.datum && <p>Datum: {regatta.datum}</p>}
-            {regatta.veranstalter && <p>Veranstalter: {regatta.veranstalter}</p>}
-            {regatta.bootsklasse && <p>Bootsklasse: {regatta.bootsklasse}</p>}
-          </div>
-        </div>
-        <span className={`px-3 py-1 ${DESIGN_TOKENS.radius.full} ${DESIGN_TOKENS.text.small} font-medium ${status.badge}`}>
-          {status.emoji} {status.label}
-        </span>
-      </div>
-
-      {regatta.status !== 'abgeschlossen' && (
-        <div className={DESIGN_TOKENS.spacing.sm}>
-          <button
-            onClick={onEdit}
-            className={getButtonClass('secondary', 'medium')}
-            style={{ minHeight: DESIGN_TOKENS.button.height.small }}
+    <div
+      className="fixed top-0 left-0 right-0 flex justify-center items-center z-50 pointer-events-none transition-opacity"
+      style={{
+        transform: `translateY(${isRefreshing ? '60px' : pullToRefreshDistance}px)`,
+        opacity: isRefreshing ? 1 : Math.min(pullToRefreshDistance / 80, 1)
+      }}
+    >
+      <div className={`bg-white rounded-full p-3 shadow-lg ${isRefreshing ? 'animate-spin' : ''}`}>
+        {isRefreshing ? (
+          <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full"></div>
+        ) : (
+          <div
+            className={`text-2xl transition-transform ${isReady ? 'text-green-500' : 'text-gray-400'}`}
+            style={{ transform: `rotate(${rotation}deg)` }}
           >
-            <Edit2 size={18} />
-            Metadaten bearbeiten
-          </button>
-        </div>
-      )}
+            ↻
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-/**
- * Inline boat form for adding boats
- */
-const InlineBoatForm = ({ 
-  formData, 
-  formErrors, 
-  onFormChange, 
-  onSubmit, 
-  onCancel 
-}) => (
-  <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
-    <h3 className={`${DESIGN_TOKENS.text.h3} mb-4`}>Neues Boot hinzufügen</h3>
-    <div className={`grid grid-cols-1 md:grid-cols-3 ${DESIGN_TOKENS.spacing.md} mb-4`}>
-      <div>
-        <label className={`block ${DESIGN_TOKENS.text.small} font-medium text-gray-700 mb-2`}>
-          Segelnummer *
-        </label>
-        <input
-          type="text"
-          value={formData.segelnummer}
-          onChange={(e) => onFormChange({ ...formData, segelnummer: e.target.value })}
-          className={getInputClass(!!formErrors.segelnummer)}
-          placeholder="z.B. GER 1234"
-          style={{ minHeight: DESIGN_TOKENS.button.height.small }}
-        />
-        {formErrors.segelnummer && (
-          <p className={`${DESIGN_TOKENS.text.small} text-red-600 mt-1`}>{formErrors.segelnummer}</p>
-        )}
-      </div>
-      <div>
-        <label className={`block ${DESIGN_TOKENS.text.small} font-medium text-gray-700 mb-2`}>
-          Steuermann
-        </label>
-        <input
-          type="text"
-          value={formData.steuermann}
-          onChange={(e) => onFormChange({ ...formData, steuermann: e.target.value })}
-          className={getInputClass()}
-          placeholder="Name"
-          style={{ minHeight: DESIGN_TOKENS.button.height.small }}
-        />
-      </div>
-      <div>
-        <label className={`block ${DESIGN_TOKENS.text.small} font-medium text-gray-700 mb-2`}>
-          Verein
-        </label>
-        <input
-          type="text"
-          value={formData.verein}
-          onChange={(e) => onFormChange({ ...formData, verein: e.target.value })}
-          className={getInputClass()}
-          placeholder="Vereinsname"
-          style={{ minHeight: DESIGN_TOKENS.button.height.small }}
-        />
-      </div>
-    </div>
-    <div className={DESIGN_TOKENS.spacing.sm}>
-      <button
-        onClick={onSubmit}
-        className={getButtonClass('primary', 'medium')}
-        style={{ minHeight: DESIGN_TOKENS.button.height.small }}
-      >
-        <Plus size={20} />
-        Boot hinzufügen
-      </button>
-      {onCancel && (
-        <button
-          onClick={onCancel}
-          className={getButtonClass('secondary', 'medium')}
-          style={{ minHeight: DESIGN_TOKENS.button.height.small }}
-        >
-          Abbrechen
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-/**
- * Boat table with sorting
- */
-const BoatTable = ({ 
-  boats, 
-  sortConfig, 
-  onSort, 
-  onEdit, 
-  onDelete,
-  isAbgeschlossen 
-}) => {
-  const SortIcon = ({ column }) => {
-    if (sortConfig.column !== column) return <ArrowUpDown size={16} className="text-gray-400" />;
-    return sortConfig.direction === 'asc' 
-      ? <ArrowUp size={16} className="text-blue-600" />
-      : <ArrowDown size={16} className="text-blue-600" />;
-  };
+const ConfirmDialog = ({ confirmDialog, setConfirmDialog }) => {
+  if (!confirmDialog.show) return null;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-gray-50 border-b-2 border-gray-200">
-          <tr>
-            <th 
-              onClick={() => onSort('segelnummer')}
-              className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Bestätigung</h3>
+        <p className="text-gray-700 mb-6">{confirmDialog.message}</p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={() => setConfirmDialog({ show: false, message: '', onConfirm: null })}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+          >
+            Abbrechen
+          </button>
+          <button
+            onClick={confirmDialog.onConfirm}
+            className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          >
+            Löschen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BottomNav = ({ currentView, setCurrentView, setActiveNavItem }) => {
+  const navItems = [
+    { id: NAV_ITEMS.ORGANISATION, icon: Edit2, label: 'Organisation', views: [VIEWS.OVERVIEW, VIEWS.CREATE_REGATTA, VIEWS.EDIT_REGATTA, VIEWS.REGATTA_DETAIL, VIEWS.EDIT_BOAT] },
+    { id: NAV_ITEMS.WERTUNG, icon: Trophy, label: 'Wertung', views: [VIEWS.WERTUNG, VIEWS.WETTFAHRTEN_OVERVIEW, VIEWS.EDIT_WETTFAHRT, VIEWS.ZIELERFASSUNG, VIEWS.ERGEBNISSE] },
+  ];
+
+  // Bestimme aktiven Tab basierend auf currentView
+  const activeItem = navItems.find(item => item.views.includes(currentView)) || navItems[0];
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-inset-bottom">
+      <div className="flex justify-around items-center" style={{ height: '64px' }}>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeItem.id === item.id;
+
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveNavItem(item.id);
+                if (item.id === NAV_ITEMS.ORGANISATION) {
+                  setCurrentView(VIEWS.OVERVIEW);
+                } else if (item.id === NAV_ITEMS.WERTUNG) {
+                  setCurrentView(VIEWS.WERTUNG);
+                }
+              }}
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-colors relative ${
+                isActive ? 'text-blue-600' : 'text-gray-600'
+              }`}
+              style={{ minWidth: '44px', minHeight: '44px' }}
             >
-              <div className="flex items-center gap-2">
-                Segelnummer
-                <SortIcon column="segelnummer" />
-              </div>
-            </th>
-            <th 
-              onClick={() => onSort('steuermann')}
-              className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              <div className="flex items-center gap-2">
-                Steuermann
-                <SortIcon column="steuermann" />
-              </div>
-            </th>
-            <th 
-              onClick={() => onSort('verein')}
-              className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              <div className="flex items-center gap-2">
-                Verein
-                <SortIcon column="verein" />
-              </div>
-            </th>
-            {!isAbgeschlossen && (
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Aktionen
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {boats.map(boat => (
-            <tr key={boat.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-mono font-semibold text-gray-900">
-                {boat.segelnummer}
-              </td>
-              <td className="px-4 py-3 text-gray-900">
-                {boat.steuermann || '-'}
-              </td>
-              <td className="px-4 py-3 text-gray-600">
-                {boat.verein || '-'}
-              </td>
-              {!isAbgeschlossen && (
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => onEdit(boat)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Bearbeiten"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => onDelete(boat.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Löschen"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
+              <Icon size={24} strokeWidth={isActive ? 2.5 : 2} className="mb-1" />
+              <span className={`text-xs ${isActive ? 'font-semibold' : 'font-normal'}`}>
+                {item.label}
+              </span>
+              {isActive && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-blue-600 rounded-b"></div>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {boats.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
-          Noch keine Boote hinzugefügt
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const RegattaCard = ({
+  regatta,
+  expandedRegattaId,
+  setExpandedRegattaId,
+  boats,
+  wettfahrten,
+  changeRegattaStatus,
+  openEditRegatta,
+  openRegattaDetail,
+  setSelectedRegatta,
+  setCurrentView
+}) => {
+  const boatCount = boats.filter(b => b.regattaId === regatta.id).length;
+  const wettfahrtCount = wettfahrten.filter(w => w.regattaId === regatta.id).length;
+  const status = regatta.status || REGATTA_STATUS.VORBEREITUNG;
+  const isExpanded = expandedRegattaId === regatta.id;
+
+  const statusConfig = {
+    [REGATTA_STATUS.VORBEREITUNG]: { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', borderStrong: 'border-yellow-500' },
+    [REGATTA_STATUS.AKTIV]: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', borderStrong: 'border-green-500' },
+    [REGATTA_STATUS.ABGESCHLOSSEN]: { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200', borderStrong: 'border-gray-500' }
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <div
+      className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer border-2 ${
+        isExpanded ? `${config.borderStrong} p-6` : 'border-transparent p-4'
+      }`}
+      onClick={() => {
+        if (isExpanded) {
+          // Wenn bereits expanded, öffne Detail
+          openRegattaDetail(regatta);
+        } else {
+          // Sonst: expandiere Card
+          setExpandedRegattaId(regatta.id);
+        }
+      }}
+    >
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex-1">
+          <h3 className={`font-bold text-gray-900 mb-2 ${isExpanded ? 'text-xl' : 'text-lg'}`}>
+            {regatta.name}
+          </h3>
+          <select
+            value={status}
+            onChange={(e) => {
+              e.stopPropagation();
+              changeRegattaStatus(regatta.id, e.target.value);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={`px-3 py-2 rounded-full text-sm font-medium ${config.bg} ${config.text} border ${config.border} cursor-pointer`}
+            style={{ minHeight: '44px' }}
+          >
+            <option value={REGATTA_STATUS.VORBEREITUNG}>🟡 Vorbereitung</option>
+            <option value={REGATTA_STATUS.AKTIV}>🟢 Aktiv</option>
+            <option value={REGATTA_STATUS.ABGESCHLOSSEN}>⚫ Abgeschlossen</option>
+          </select>
+        </div>
+        {status !== REGATTA_STATUS.ABGESCHLOSSEN && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openEditRegatta(regatta);
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center"
+            style={{ minWidth: '44px', minHeight: '44px' }}
+          >
+            <Edit2 size={20} />
+          </button>
+        )}
+      </div>
+
+      <div className={`grid gap-2 mb-4 ${isExpanded ? 'text-base' : 'text-sm'} text-gray-600`}>
+        {regatta.datum && (
+          <div className="flex items-center gap-2">
+            <span>📅</span>
+            <span>{regatta.datum}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <span>⛵</span>
+          <span>{boatCount} Boote</span>
+        </div>
+        {wettfahrtCount > 0 && (
+          <div className="flex items-center gap-2">
+            <span>🏁</span>
+            <span>{wettfahrtCount} Wettfahrten</span>
+          </div>
+        )}
+      </div>
+
+      {isExpanded && (
+        <div className="grid grid-cols-2 gap-2 pt-4 border-t border-gray-100">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openRegattaDetail(regatta);
+            }}
+            className="bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium transition-colors active:scale-95"
+            style={{ minHeight: '44px' }}
+          >
+            ÖFFNEN
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedRegatta(regatta);
+              setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
+            }}
+            className="bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-medium transition-colors active:scale-95"
+            style={{ minHeight: '44px' }}
+          >
+            WERTUNG
+          </button>
         </div>
       )}
     </div>
@@ -1042,32 +1039,32 @@ export default function RegattaApp() {
 
   // Load data from localStorage on mount
   useEffect(() => {
-    setRegattas(loadFromStorage('regattas', []));
-    setBoats(loadFromStorage('boats', []));
-    setWettfahrten(loadFromStorage('wettfahrten', []));
-    setErgebnisse(loadFromStorage('ergebnisse', []));
-    setStreicher(loadFromStorage('streicher', {}));
+    setRegattas(loadFromStorage(STORAGE_KEYS.REGATTAS, []));
+    setBoats(loadFromStorage(STORAGE_KEYS.BOATS, []));
+    setWettfahrten(loadFromStorage(STORAGE_KEYS.WETTFAHRTEN, []));
+    setErgebnisse(loadFromStorage(STORAGE_KEYS.ERGEBNISSE, []));
+    setStreicher(loadFromStorage(STORAGE_KEYS.STREICHER, {}));
   }, []);
 
   // Save to localStorage whenever data changes
   useEffect(() => {
-    saveToStorage('regattas', regattas);
+    saveToStorage(STORAGE_KEYS.REGATTAS, regattas);
   }, [regattas]);
 
   useEffect(() => {
-    saveToStorage('boats', boats);
+    saveToStorage(STORAGE_KEYS.BOATS, boats);
   }, [boats]);
 
   useEffect(() => {
-    saveToStorage('wettfahrten', wettfahrten);
+    saveToStorage(STORAGE_KEYS.WETTFAHRTEN, wettfahrten);
   }, [wettfahrten]);
 
   useEffect(() => {
-    saveToStorage('ergebnisse', ergebnisse);
+    saveToStorage(STORAGE_KEYS.ERGEBNISSE, ergebnisse);
   }, [ergebnisse]);
 
   useEffect(() => {
-    saveToStorage('streicher', streicher);
+    saveToStorage(STORAGE_KEYS.STREICHER, streicher);
   }, [streicher]);
 
   // Regatta Functions
@@ -1083,13 +1080,13 @@ export default function RegattaApp() {
       datum: regattaForm.datum,
       veranstalter: regattaForm.veranstalter,
       bootsklasse: regattaForm.bootsklasse,
-      status: 'vorbereitung', // 'vorbereitung', 'aktiv', 'abgeschlossen'
+      status: REGATTA_STATUS.VORBEREITUNG,
       erstelltAm: new Date().toISOString()
     };
 
     setRegattas([...regattas, newRegatta]);
     setRegattaForm({ name: '', datum: '', veranstalter: '', bootsklasse: '' });
-    setCurrentView('overview');
+    setCurrentView(VIEWS.OVERVIEW);
   };
 
   const updateRegatta = () => {
@@ -1106,7 +1103,7 @@ export default function RegattaApp() {
     
     setSelectedRegatta({ ...selectedRegatta, ...regattaForm });
     setRegattaForm({ name: '', datum: '', veranstalter: '', bootsklasse: '' });
-    setCurrentView('regattaDetail');
+    setCurrentView(VIEWS.REGATTA_DETAIL);
   };
 
   const deleteRegatta = (id) => {
@@ -1118,7 +1115,7 @@ export default function RegattaApp() {
         setBoats(boats.filter(b => b.regattaId !== id));
         if (selectedRegatta?.id === id) {
           setSelectedRegatta(null);
-          setCurrentView('overview');
+          setCurrentView(VIEWS.OVERVIEW);
         }
         setConfirmDialog({ show: false, message: '', onConfirm: null });
       }
@@ -1144,7 +1141,7 @@ export default function RegattaApp() {
       veranstalter: regatta.veranstalter || '',
       bootsklasse: regatta.bootsklasse || ''
     });
-    setCurrentView('editRegatta');
+    setCurrentView(VIEWS.EDIT_REGATTA);
   };
 
   // Boat Functions
@@ -1226,7 +1223,7 @@ export default function RegattaApp() {
     
     setBoatForm({ segelnummer: '', steuermann: '', verein: '' });
     setEditingBoat(null);
-    setCurrentView('regattaDetail');
+    setCurrentView(VIEWS.REGATTA_DETAIL);
   };
 
   const deleteBoat = (id) => {
@@ -1247,12 +1244,12 @@ export default function RegattaApp() {
       steuermann: boat.steuermann || '',
       verein: boat.verein || ''
     });
-    setCurrentView('editBoat');
+    setCurrentView(VIEWS.EDIT_BOAT);
   };
 
   const openRegattaDetail = (regatta) => {
     setSelectedRegatta(regatta);
-    setCurrentView('regattaDetail');
+    setCurrentView(VIEWS.REGATTA_DETAIL);
   };
 
   // Get boats for current regatta
@@ -1264,20 +1261,14 @@ export default function RegattaApp() {
   const getFilteredAndSortedBoats = () => {
     let filtered = regattaBoats;
 
-    // Apply filters
-    if (boatFilter.segelnummer) {
-      filtered = filtered.filter(b => 
-        b.segelnummer.toLowerCase().includes(boatFilter.segelnummer.toLowerCase())
-      );
-    }
-    if (boatFilter.steuermann) {
-      filtered = filtered.filter(b => 
-        (b.steuermann || '').toLowerCase().includes(boatFilter.steuermann.toLowerCase())
-      );
-    }
-    if (boatFilter.verein) {
-      filtered = filtered.filter(b => 
-        (b.verein || '').toLowerCase().includes(boatFilter.verein.toLowerCase())
+    // Apply global search filter (OR logic: match any field)
+    const searchTerm = boatFilter.segelnummer || boatFilter.steuermann || boatFilter.verein;
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      filtered = filtered.filter(b =>
+        b.segelnummer?.toLowerCase().includes(lower) ||
+        (b.steuermann || '').toLowerCase().includes(lower) ||
+        (b.verein || '').toLowerCase().includes(lower)
       );
     }
 
@@ -1354,7 +1345,7 @@ export default function RegattaApp() {
       windstaerke: wettfahrt.windstaerke || '',
       bahnlaenge: wettfahrt.bahnlaenge || ''
     });
-    setCurrentView('editWettfahrt');
+    setCurrentView(VIEWS.EDIT_WETTFAHRT);
   };
 
   const saveWettfahrtMetadata = () => {
@@ -1378,7 +1369,7 @@ export default function RegattaApp() {
         : w
     ));
     setWettfahrtForm({ startzeit: '', zielzeit: '', windstaerke: '', bahnlaenge: '' });
-    setCurrentView('wettfahrtenOverview');
+    setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
   };
 
   const startZielerfassung = (wettfahrt) => {
@@ -1403,18 +1394,12 @@ export default function RegattaApp() {
         }
       });
       setBoatPenalties(penalties);
-      
-      console.log('✅ Loaded results:', {
-        active: activeBoats.length,
-        penalties: penaltyBoats.length,
-        total: sortedResults.length
-      });
     } else {
       setZielBoats([]);
       setBoatPenalties({});
     }
     
-    setCurrentView('zielerfassung');
+    setCurrentView(VIEWS.ZIELERFASSUNG);
   };
 
   const addBoatToZiel = (boatId) => {
@@ -1433,7 +1418,7 @@ export default function RegattaApp() {
     setZielBoats(newZielBoats);
     
     // Autosave after state update
-    setTimeout(() => autoSaveZielerfassung(newZielBoats, boatPenalties), 100);
+    setTimeout(() => autoSaveZielerfassung(newZielBoats, boatPenalties), UI.SCROLL_DELAY);
   };
 
   const removeBoatFromZiel = (boatId) => {
@@ -1448,7 +1433,7 @@ export default function RegattaApp() {
     }
     
     // Autosave after state update
-    setTimeout(() => autoSaveZielerfassung(newZielBoats, newPenalties), 100);
+    setTimeout(() => autoSaveZielerfassung(newZielBoats, newPenalties), UI.SCROLL_DELAY);
   };
 
   const reorderZielBoats = (fromIndex, toIndex) => {
@@ -1458,135 +1443,97 @@ export default function RegattaApp() {
     setZielBoats(newZielBoats);
     
     // Autosave after state update
-    setTimeout(() => autoSaveZielerfassung(newZielBoats, boatPenalties), 100);
+    setTimeout(() => autoSaveZielerfassung(newZielBoats, boatPenalties), UI.SCROLL_DELAY);
   };
 
   // Autosave Funktion - speichert in Ergebnisse
   const autoSaveZielerfassung = (currentZielBoats, currentPenalties) => {
     if (!selectedWettfahrt) return;
-    
-    // Remove old results for this Wettfahrt
-    const filteredErgebnisse = ergebnisse.filter(e => e.wettfahrtId !== selectedWettfahrt.id);
-    
+
+    const wettfahrtId = selectedWettfahrt.id;
+
     // Create new results from current zielBoats
     const newErgebnisse = [];
     let platzCounter = 1;
-    
+
     currentZielBoats.forEach((boatId) => {
       const penalty = currentPenalties[boatId];
-      
+
       newErgebnisse.push({
-        id: `result_${selectedWettfahrt.id}_${boatId}_${Date.now()}`,
-        wettfahrtId: selectedWettfahrt.id,
+        id: `result_${wettfahrtId}_${boatId}_${Date.now()}`,
+        wettfahrtId: wettfahrtId,
         bootId: boatId,
         platz: penalty ? null : platzCounter,
         penalty: penalty || null
       });
-      
+
       if (!penalty) {
         platzCounter++;
       }
     });
-    
-    setErgebnisse([...filteredErgebnisse, ...newErgebnisse]);
-    console.log('✅ Autosave:', newErgebnisse.length, 'Ergebnisse gespeichert');
+
+    // Functional update: always operates on latest state, avoiding stale closure
+    setErgebnisse(prev => [
+      ...prev.filter(e => e.wettfahrtId !== wettfahrtId),
+      ...newErgebnisse
+    ]);
   };
 
   // Wertung abschließen mit Validation
   const completeWertung = (force = false) => {
-    console.log('🔍 ===== completeWertung START =====');
-    console.log('🔍 force parameter:', force);
-    console.log('🔍 typeof force:', typeof force);
-    console.log('🔍 force === true:', force === true);
-    console.log('🔍 force === false:', force === false);
-    console.log('🔍 selectedRegatta:', selectedRegatta);
-    
     const regattaBoats = queries.regatta.getBoats(boats, selectedRegatta.id);
     const verfuegbareBoats = queries.regatta.getAvailableBoats(boats, selectedRegatta.id, zielBoats);
-    
-    console.log('🔍 Total boats in regatta:', regattaBoats.length);
-    console.log('🔍 regattaBoats:', regattaBoats.map(b => ({ id: b.id, seg: b.segelnummer })));
-    console.log('🔍 Boats in Ziel:', zielBoats.length);
-    console.log('🔍 zielBoats IDs:', zielBoats);
-    
-    // Welche Boote sind im Ziel (mit Segelnummer)
-    const zielBoatsDetails = queries.boot.getByIds(boats, zielBoats).map(b => b.segelnummer);
-    console.log('🔍 Boote im Ziel (Segelnummern):', zielBoatsDetails);
-    
-    console.log('🔍 Verfuegbare boats:', verfuegbareBoats.length);
-    console.log('🔍 verfuegbareBoats:', verfuegbareBoats.map(b => ({ id: b.id, seg: b.segelnummer })));
-    
+
     // Clear previous error
     setWertungValidationError(null);
-    
+
     // Validation: Alle Boote müssen bewertet sein (außer wenn force=true)
     if (!force) {
       const validation = validators.wertung.allBoatsRated(regattaBoats, zielBoats);
-      
+
       if (!validation.valid) {
-        console.log('❌ VALIDATION FAILED - Showing error banner');
         setWertungValidationError(validation.data);
-        console.error(
-          `❌ ${validation.message}\n` +
-          `Es sind noch ${validation.data.count} Boot(e) nicht im Ziel:\n` +
-          validation.data.boats.map(b => `- ${b.segelnummer}`).join('\n')
-        );
-        console.log('🛑 RETURN - Stopping execution');
         return;
       }
     }
-    
-    console.log('✅ Validation passed - Proceeding with completion');
-    
+
     // Wenn force=true: Füge fehlende Boote als DNS hinzu
     if (force && verfuegbareBoats.length > 0) {
-      console.log('⚠️ Force mode - Adding DNS boats');
       const updatedZielBoats = [...zielBoats];
       const updatedPenalties = { ...boatPenalties };
-      
+
       // Füge alle fehlenden Boote am Ende als DNS hinzu
       verfuegbareBoats.forEach(boat => {
         updatedZielBoats.push(boat.id);
         updatedPenalties[boat.id] = PENALTY_CODES.DNS;
       });
-      
+
       setZielBoats(updatedZielBoats);
       setBoatPenalties(updatedPenalties);
-      
+
       // Save with DNS boats
       autoSaveZielerfassung(updatedZielBoats, updatedPenalties);
-      
-      console.log(`⚠️ ${verfuegbareBoats.length} fehlende Boote als DNS hinzugefügt`);
     } else {
       // Normal save (alle Boote erfasst)
-      console.log('💾 Normal save - all boats captured');
       autoSaveZielerfassung(zielBoats, boatPenalties);
     }
-    
+
     // Mark Wettfahrt as completed (unvollstaendig if boats were missing)
     const isUnvollstaendig = verfuegbareBoats.length > 0;
-    console.log('📊 isUnvollstaendig:', isUnvollstaendig);
-    
+
     const updatedWettfahrten = wettfahrten.map(w =>
       w.id === selectedWettfahrt.id
         ? { ...w, abgeschlossen: true, unvollstaendig: isUnvollstaendig }
         : w
     );
     setWettfahrten(updatedWettfahrten);
-    
+
     // Update selectedWettfahrt to reflect new status
-    setSelectedWettfahrt({ 
-      ...selectedWettfahrt, 
-      abgeschlossen: true, 
-      unvollstaendig: isUnvollstaendig 
+    setSelectedWettfahrt({
+      ...selectedWettfahrt,
+      abgeschlossen: true,
+      unvollstaendig: isUnvollstaendig
     });
-    
-    // Success message
-    if (isUnvollstaendig) {
-      console.log(`⚠️ Wertung unvollständig abgeschlossen! ${zielBoats.length} Boote bewertet, ${verfuegbareBoats.length} fehlen.`);
-    } else {
-      console.log(`✅ Wertung abgeschlossen! ${zielBoats.length} Boote wurden bewertet.`);
-    }
   };
 
   // Wertung erneut öffnen (für Korrekturen)
@@ -1599,13 +1546,11 @@ export default function RegattaApp() {
     setWettfahrten(updatedWettfahrten);
     
     // Update selectedWettfahrt to reflect new status
-    setSelectedWettfahrt({ 
-      ...selectedWettfahrt, 
-      abgeschlossen: false, 
-      unvollstaendig: false 
+    setSelectedWettfahrt({
+      ...selectedWettfahrt,
+      abgeschlossen: false,
+      unvollstaendig: false
     });
-    
-    console.log('🔓 Wertung erneut geöffnet - Bearbeitung möglich');
   };
 
   const changeBoatPlacement = (boatId, newPlacement) => {
@@ -1672,37 +1617,9 @@ export default function RegattaApp() {
     setSelectedBoatInZiel(null);
   };
 
-  const saveWettfahrtErgebnisse = () => {
-    // Remove old results for this wettfahrt
-    const filteredErgebnisse = ergebnisse.filter(e => e.wettfahrtId !== selectedWettfahrt.id);
-    
-    // Create new results (including penalties)
-    const newErgebnisse = zielBoats.map((boatId, index) => ({
-      id: generateId(),
-      wettfahrtId: selectedWettfahrt.id,
-      bootId: boatId,
-      platz: index + 1,
-      penalty: boatPenalties[boatId] || null
-    }));
-
-    setErgebnisse([...filteredErgebnisse, ...newErgebnisse]);
-    
-    // Mark wettfahrt as completed
-    setWettfahrten(wettfahrten.map(w => 
-      w.id === selectedWettfahrt.id 
-        ? { ...w, abgeschlossen: true }
-        : w
-    ));
-
-    setCurrentView('wettfahrtenOverview');
-    setZielBoats([]);
-    setBoatPenalties({});
-    setSelectedBoatInZiel(null);
-  };
-
   const viewErgebnisse = (wettfahrt) => {
     setSelectedWettfahrt(wettfahrt);
-    setCurrentView('ergebnisseView');
+    setCurrentView(VIEWS.ERGEBNISSE);
   };
 
   // Calculate overall results across all races
@@ -1829,6 +1746,13 @@ export default function RegattaApp() {
     };
   };
 
+  // Memoized overall results – only recalculated when relevant data changes
+  const gesamtergebnis = useMemo(
+    () => selectedRegatta ? calculateGesamtergebnis(selectedRegatta.id) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedRegatta?.id, wettfahrten, ergebnisse, boats, streicher]
+  );
+
   // Touch-Hold Helper Functions
   const handleTouchStart = (e, index, boatId) => {
     // Don't allow dragging boats with penalties or during editing
@@ -1911,6 +1835,7 @@ export default function RegattaApp() {
         const [movedBoat] = newOrder.splice(draggedIndex, 1);
         newOrder.splice(dragOverIndex, 0, movedBoat);
         setZielBoats(newOrder);
+        setTimeout(() => autoSaveZielerfassung(newOrder, boatPenalties), UI.SCROLL_DELAY);
       }
     }
     
@@ -1937,8 +1862,9 @@ export default function RegattaApp() {
       const [movedBoat] = newOrder.splice(draggedIndex, 1);
       newOrder.splice(dragOverIndex, 0, movedBoat);
       setZielBoats(newOrder);
+      setTimeout(() => autoSaveZielerfassung(newOrder, boatPenalties), UI.SCROLL_DELAY);
     }
-    
+
     // Reset drag state
     setDraggedIndex(null);
     setDragOverIndex(null);
@@ -1994,11 +1920,11 @@ export default function RegattaApp() {
       // Simulate refresh
       setTimeout(() => {
         // Reload data from localStorage
-        const storedRegattas = loadFromStorage('regattas', []);
-        const storedBoats = loadFromStorage('boats', []);
-        const storedWettfahrten = loadFromStorage('wettfahrten', []);
-        const storedErgebnisse = loadFromStorage('ergebnisse', []);
-        const storedStreicher = loadFromStorage('streicher', {});
+        const storedRegattas = loadFromStorage(STORAGE_KEYS.REGATTAS, []);
+        const storedBoats = loadFromStorage(STORAGE_KEYS.BOATS, []);
+        const storedWettfahrten = loadFromStorage(STORAGE_KEYS.WETTFAHRTEN, []);
+        const storedErgebnisse = loadFromStorage(STORAGE_KEYS.ERGEBNISSE, []);
+        const storedStreicher = loadFromStorage(STORAGE_KEYS.STREICHER, {});
         
         setRegattas(storedRegattas);
         setBoats(storedBoats);
@@ -2020,22 +1946,22 @@ export default function RegattaApp() {
     // Swipe back (right swipe > 100px)
     if (Math.abs(deltaY) < 50 && deltaX > 100) {
       // Navigate back
-      if (currentView === 'regattaDetail') {
-        setCurrentView('overview');
-      } else if (currentView === 'editBoat') {
-        setCurrentView('regattaDetail');
-      } else if (currentView === 'wettfahrtenOverview') {
-        setCurrentView('wertung');
-      } else if (currentView === 'zielerfassung') {
-        setCurrentView('wettfahrtenOverview');
-      } else if (currentView === 'ergebnisseView') {
-        setCurrentView('wettfahrtenOverview');
-      } else if (currentView === 'editWettfahrt') {
-        setCurrentView('wettfahrtenOverview');
-      } else if (currentView === 'editRegatta') {
-        setCurrentView('overview');
-      } else if (currentView === 'createRegatta') {
-        setCurrentView('overview');
+      if (currentView === VIEWS.REGATTA_DETAIL) {
+        setCurrentView(VIEWS.OVERVIEW);
+      } else if (currentView === VIEWS.EDIT_BOAT) {
+        setCurrentView(VIEWS.REGATTA_DETAIL);
+      } else if (currentView === VIEWS.WETTFAHRTEN_OVERVIEW) {
+        setCurrentView(VIEWS.WERTUNG);
+      } else if (currentView === VIEWS.ZIELERFASSUNG) {
+        setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
+      } else if (currentView === VIEWS.ERGEBNISSE) {
+        setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
+      } else if (currentView === VIEWS.EDIT_WETTFAHRT) {
+        setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
+      } else if (currentView === VIEWS.EDIT_REGATTA) {
+        setCurrentView(VIEWS.OVERVIEW);
+      } else if (currentView === VIEWS.CREATE_REGATTA) {
+        setCurrentView(VIEWS.OVERVIEW);
       }
       
       // Haptic feedback
@@ -2063,153 +1989,22 @@ export default function RegattaApp() {
 
 
 
-  // Bottom Sheet Component für Boot hinzufügen
-  // Pull-to-Refresh Indicator Component
-  const PullToRefreshIndicator = () => {
-    if (pullToRefreshDistance === 0 && !isRefreshing) return null;
-    
-    const isReady = pullToRefreshDistance > 80;
-    const rotation = Math.min(pullToRefreshDistance * 3, 360);
-    
-    return (
-      <div 
-        className="fixed top-0 left-0 right-0 flex justify-center items-center z-50 pointer-events-none transition-opacity"
-        style={{ 
-          transform: `translateY(${isRefreshing ? '60px' : pullToRefreshDistance}px)`,
-          opacity: isRefreshing ? 1 : Math.min(pullToRefreshDistance / 80, 1)
-        }}
-      >
-        <div className={`bg-white rounded-full p-3 shadow-lg ${isRefreshing ? 'animate-spin' : ''}`}>
-          {isRefreshing ? (
-            <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full"></div>
-          ) : (
-            <div 
-              className={`text-2xl transition-transform ${isReady ? 'text-green-500' : 'text-gray-400'}`}
-              style={{ transform: `rotate(${rotation}deg)` }}
-            >
-              ↻
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   // Render Functions
   const renderOverview = () => {
-    const vorbereitungRegattas = regattas.filter(r => r.status === 'vorbereitung' || !r.status);
-    const aktiveRegattas = regattas.filter(r => r.status === 'aktiv');
-    const abgeschlosseneRegattas = regattas.filter(r => r.status === 'abgeschlossen');
+    const vorbereitungRegattas = regattas.filter(r => r.status === REGATTA_STATUS.VORBEREITUNG || !r.status);
+    const aktiveRegattas = regattas.filter(r => r.status === REGATTA_STATUS.AKTIV);
+    const abgeschlosseneRegattas = regattas.filter(r => r.status === REGATTA_STATUS.ABGESCHLOSSEN);
 
-    const RegattaCard = ({ regatta, isPrimary = false }) => {
-      const boatCount = boats.filter(b => b.regattaId === regatta.id).length;
-      const wettfahrtCount = wettfahrten.filter(w => w.regattaId === regatta.id).length;
-      const status = regatta.status || 'vorbereitung';
-      const isExpanded = expandedRegattaId === regatta.id;
-      
-      const statusConfig = {
-        vorbereitung: { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', borderStrong: 'border-yellow-500' },
-        aktiv: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', borderStrong: 'border-green-500' },
-        abgeschlossen: { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200', borderStrong: 'border-gray-500' }
-      };
-      
-      const config = statusConfig[status];
-
-      return (
-        <div
-          className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer border-2 ${
-            isExpanded ? `${config.borderStrong} p-6` : 'border-transparent p-4'
-          }`}
-          onClick={() => {
-            if (isExpanded) {
-              // Wenn bereits expanded, öffne Detail
-              openRegattaDetail(regatta);
-            } else {
-              // Sonst: expandiere Card
-              setExpandedRegattaId(regatta.id);
-            }
-          }}
-        >
-          <div className="flex justify-between items-start mb-3">
-            <div className="flex-1">
-              <h3 className={`font-bold text-gray-900 mb-2 ${isExpanded ? 'text-xl' : 'text-lg'}`}>
-                {regatta.name}
-              </h3>
-              <select
-                value={status}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  changeRegattaStatus(regatta.id, e.target.value);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className={`px-3 py-2 rounded-full text-sm font-medium ${config.bg} ${config.text} border ${config.border} cursor-pointer`}
-                style={{ minHeight: '44px' }}
-              >
-                <option value="vorbereitung">🟡 Vorbereitung</option>
-                <option value="aktiv">🟢 Aktiv</option>
-                <option value="abgeschlossen">⚫ Abgeschlossen</option>
-              </select>
-            </div>
-            {status !== 'abgeschlossen' && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openEditRegatta(regatta);
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center"
-                style={{ minWidth: '44px', minHeight: '44px' }}
-              >
-                <Edit2 size={20} />
-              </button>
-            )}
-          </div>
-
-          <div className={`grid gap-2 mb-4 ${isExpanded ? 'text-base' : 'text-sm'} text-gray-600`}>
-            {regatta.datum && (
-              <div className="flex items-center gap-2">
-                <span>📅</span>
-                <span>{regatta.datum}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <span>⛵</span>
-              <span>{boatCount} Boote</span>
-            </div>
-            {wettfahrtCount > 0 && (
-              <div className="flex items-center gap-2">
-                <span>🏁</span>
-                <span>{wettfahrtCount} Wettfahrten</span>
-              </div>
-            )}
-          </div>
-
-          {isExpanded && (
-            <div className="grid grid-cols-2 gap-2 pt-4 border-t border-gray-100">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openRegattaDetail(regatta);
-                }}
-                className="bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium transition-colors active:scale-95"
-                style={{ minHeight: '44px' }}
-              >
-                ÖFFNEN
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRegatta(regatta);
-                  setCurrentView('wettfahrtenOverview');
-                }}
-                className="bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-medium transition-colors active:scale-95"
-                style={{ minHeight: '44px' }}
-              >
-                WERTUNG
-              </button>
-            </div>
-          )}
-        </div>
-      );
+    const sharedCardProps = {
+      expandedRegattaId,
+      setExpandedRegattaId,
+      boats,
+      wettfahrten,
+      changeRegattaStatus,
+      openEditRegatta,
+      openRegattaDetail,
+      setSelectedRegatta,
+      setCurrentView
     };
 
     return (
@@ -2223,7 +2018,7 @@ export default function RegattaApp() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Organisation</h1>
             <button
-              onClick={() => setCurrentView('createRegatta')}
+              onClick={() => setCurrentView(VIEWS.CREATE_REGATTA)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors active:scale-95"
               style={{ minHeight: '44px' }}
             >
@@ -2237,7 +2032,7 @@ export default function RegattaApp() {
               <div className="text-6xl mb-4">⛵</div>
               <p className="text-gray-500 mb-4">Noch keine Regatten angelegt.</p>
               <button
-                onClick={() => setCurrentView('createRegatta')}
+                onClick={() => setCurrentView(VIEWS.CREATE_REGATTA)}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium transition-colors active:scale-95"
                 style={{ minHeight: '44px' }}
               >
@@ -2268,7 +2063,7 @@ export default function RegattaApp() {
                     <div className="p-4 pt-0 border-t border-gray-100">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {aktiveRegattas.map((regatta) => (
-                          <RegattaCard key={regatta.id} regatta={regatta} />
+                          <RegattaCard key={regatta.id} regatta={regatta} {...sharedCardProps} />
                         ))}
                       </div>
                     </div>
@@ -2298,7 +2093,7 @@ export default function RegattaApp() {
                     <div className="p-4 pt-0 border-t border-gray-100">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {vorbereitungRegattas.map((regatta) => (
-                          <RegattaCard key={regatta.id} regatta={regatta} />
+                          <RegattaCard key={regatta.id} regatta={regatta} {...sharedCardProps} />
                         ))}
                       </div>
                     </div>
@@ -2328,7 +2123,7 @@ export default function RegattaApp() {
                     <div className="p-4 pt-0 border-t border-gray-100">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {abgeschlosseneRegattas.map((regatta) => (
-                          <RegattaCard key={regatta.id} regatta={regatta} />
+                          <RegattaCard key={regatta.id} regatta={regatta} {...sharedCardProps} />
                         ))}
                       </div>
                     </div>
@@ -2347,7 +2142,7 @@ export default function RegattaApp() {
         <button
           onClick={() => {
             setRegattaForm({ name: '', datum: '', veranstalter: '', bootsklasse: '' });
-            setCurrentView(isEdit ? 'regattaDetail' : 'overview');
+            setCurrentView(isEdit ? VIEWS.REGATTA_DETAIL : VIEWS.OVERVIEW);
           }}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
@@ -2423,7 +2218,7 @@ export default function RegattaApp() {
               <button
                 onClick={() => {
                   setRegattaForm({ name: '', datum: '', veranstalter: '', bootsklasse: '' });
-                  setCurrentView(isEdit ? 'regattaDetail' : 'overview');
+                  setCurrentView(isEdit ? VIEWS.REGATTA_DETAIL : VIEWS.OVERVIEW);
                 }}
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
@@ -2445,7 +2240,7 @@ export default function RegattaApp() {
     >
       <div className="max-w-7xl mx-auto">
         <button
-          onClick={() => setCurrentView('overview')}
+          onClick={() => setCurrentView(VIEWS.OVERVIEW)}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 py-2"
           style={{ minHeight: '44px' }}
         >
@@ -2464,15 +2259,15 @@ export default function RegattaApp() {
               </div>
             </div>
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              selectedRegatta.status === 'aktiv'
+              selectedRegatta.status === REGATTA_STATUS.AKTIV
                 ? 'bg-green-100 text-green-800'
-                : selectedRegatta.status === 'abgeschlossen'
+                : selectedRegatta.status === REGATTA_STATUS.ABGESCHLOSSEN
                 ? 'bg-gray-100 text-gray-800'
                 : 'bg-yellow-100 text-yellow-800'
             }`}>
-              {selectedRegatta.status === 'aktiv'
+              {selectedRegatta.status === REGATTA_STATUS.AKTIV
                 ? '🟢 Aktiv'
-                : selectedRegatta.status === 'abgeschlossen'
+                : selectedRegatta.status === REGATTA_STATUS.ABGESCHLOSSEN
                 ? '⚫ Abgeschlossen'
                 : '🟡 In Vorbereitung'
               }
@@ -2480,7 +2275,7 @@ export default function RegattaApp() {
           </div>
 
           <div className="flex gap-3">
-            {selectedRegatta.status !== 'abgeschlossen' && (
+            {selectedRegatta.status !== REGATTA_STATUS.ABGESCHLOSSEN && (
               <button
                 onClick={() => openEditRegatta(selectedRegatta)}
                 className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
@@ -2499,7 +2294,7 @@ export default function RegattaApp() {
             <h2 className="text-xl font-bold text-gray-900">
               Boote ({regattaBoats.length})
             </h2>
-            {selectedRegatta.status !== 'abgeschlossen' && (
+            {selectedRegatta.status !== REGATTA_STATUS.ABGESCHLOSSEN && (
               <button
                 onClick={() => setShowBootFormExpanded(!showBootFormExpanded)}
                 className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all active:scale-95"
@@ -2521,7 +2316,7 @@ export default function RegattaApp() {
           </div>
 
           {/* Expandable Form */}
-          {showBootFormExpanded && selectedRegatta.status !== 'abgeschlossen' && (
+          {showBootFormExpanded && selectedRegatta.status !== REGATTA_STATUS.ABGESCHLOSSEN && (
             <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
               <h3 className="font-semibold text-gray-900 mb-4">Neues Boot hinzufügen</h3>
               
@@ -2595,13 +2390,13 @@ export default function RegattaApp() {
             </div>
           )}
 
-          {selectedRegatta.status === 'abgeschlossen' && regattaBoats.length === 0 && (
+          {selectedRegatta.status === REGATTA_STATUS.ABGESCHLOSSEN && regattaBoats.length === 0 && (
             <div className="text-center py-8 text-gray-500">
               Keine Boote vorhanden. Diese Regatta ist abgeschlossen.
             </div>
           )}
 
-          {regattaBoats.length === 0 && selectedRegatta.status !== 'abgeschlossen' && !showBootFormExpanded && (
+          {regattaBoats.length === 0 && selectedRegatta.status !== REGATTA_STATUS.ABGESCHLOSSEN && !showBootFormExpanded && (
             <div className="text-center py-12">
               <div className="text-5xl mb-3">⛵</div>
               <p className="text-gray-500 mb-4">Noch keine Boote hinzugefügt.</p>
@@ -2715,7 +2510,7 @@ export default function RegattaApp() {
                               </div>
                             )}
                           </div>
-                          {selectedRegatta.status !== 'abgeschlossen' && (
+                          {selectedRegatta.status !== REGATTA_STATUS.ABGESCHLOSSEN && (
                             <div className="flex gap-2">
                               <button
                                 onClick={() => openEditBoat(boat)}
@@ -2774,7 +2569,7 @@ export default function RegattaApp() {
           onClick={() => {
             setBoatForm({ segelnummer: '', steuermann: '', verein: '' });
             setEditingBoat(null);
-            setCurrentView('regattaDetail');
+            setCurrentView(VIEWS.REGATTA_DETAIL);
           }}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
@@ -2837,7 +2632,7 @@ export default function RegattaApp() {
                 onClick={() => {
                   setBoatForm({ segelnummer: '', steuermann: '', verein: '' });
                   setEditingBoat(null);
-                  setCurrentView('regattaDetail');
+                  setCurrentView(VIEWS.REGATTA_DETAIL);
                 }}
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
@@ -2852,7 +2647,7 @@ export default function RegattaApp() {
 
   // Wertungs-Bereich Render Functions
   const renderWertungOverview = () => {
-    const aktiveRegattas = regattas.filter(r => r.status === 'aktiv');
+    const aktiveRegattas = regattas.filter(r => r.status === REGATTA_STATUS.AKTIV);
 
     return (
       <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
@@ -2867,7 +2662,7 @@ export default function RegattaApp() {
               <p className="text-gray-500 mb-4">Keine aktiven Regatten vorhanden.</p>
               <p className="text-sm text-gray-400 mb-4">Setzen Sie eine Regatta auf &quot;Aktiv&quot; um sie hier anzuzeigen.</p>
               <button
-                onClick={() => setCurrentView('overview')}
+                onClick={() => setCurrentView(VIEWS.OVERVIEW)}
                 className="text-blue-600 hover:text-blue-700 font-medium"
               >
                 Zur Organisation wechseln
@@ -2885,7 +2680,7 @@ export default function RegattaApp() {
                       key={regatta.id}
                       onClick={() => {
                         setSelectedRegatta(regatta);
-                        setCurrentView('wettfahrtenOverview');
+                        setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
                       }}
                       className="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-all cursor-pointer border-2 border-transparent hover:border-blue-200"
                     >
@@ -2944,7 +2739,7 @@ export default function RegattaApp() {
 
   const renderWettfahrtenOverview = () => {
     const regattaWettfahrten = wettfahrten.filter(w => w.regattaId === selectedRegatta.id);
-    const gesamtergebnis = calculateGesamtergebnis(selectedRegatta.id);
+    // gesamtergebnis is memoized at component level
 
     return (
       <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8 pb-24">
@@ -2953,7 +2748,7 @@ export default function RegattaApp() {
           <button
             onClick={() => {
               setSelectedRegatta(null);
-              setCurrentView('wertung');
+              setCurrentView(VIEWS.WERTUNG);
             }}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 py-2"
             style={{ minHeight: '44px' }}
@@ -3110,7 +2905,6 @@ export default function RegattaApp() {
                   </thead>
                   <tbody>
                     {gesamtergebnis.results.map((result, index) => {
-                      const medals = ['🥇', '🥈', '🥉'];
                       return (
                         <tr
                           key={result.boat.id}
@@ -3118,7 +2912,7 @@ export default function RegattaApp() {
                         >
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
-                              {index < 3 && <span className="text-xl">{medals[index]}</span>}
+                              {index < 3 && <span className="text-xl">{MEDALS[index]}</span>}
                               <span className="font-semibold">{index + 1}</span>
                             </div>
                           </td>
@@ -3167,7 +2961,7 @@ export default function RegattaApp() {
         <button
           onClick={() => {
             setWettfahrtForm({ startzeit: '', zielzeit: '', windstaerke: '', bahnlaenge: '' });
-            setCurrentView('wettfahrtenOverview');
+            setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
           }}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
@@ -3253,7 +3047,7 @@ export default function RegattaApp() {
               <button
                 onClick={() => {
                   setWettfahrtForm({ startzeit: '', zielzeit: '', windstaerke: '', bahnlaenge: '' });
-                  setCurrentView('wettfahrtenOverview');
+                  setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
                 }}
                 className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
@@ -3291,8 +3085,7 @@ export default function RegattaApp() {
             isUnvollstaendig={selectedWettfahrt.unvollstaendig}
             boatsCount={zielBoats.length}
             onBack={() => {
-              console.log('Zurück button clicked - navigating back');
-              setCurrentView('wettfahrtenOverview');
+              setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW);
               setZielBoats([]);
               setBoatPenalties({});
             }}
@@ -3399,8 +3192,7 @@ export default function RegattaApp() {
                   const isActiveBoot = !boatPenalties[boatId];
                   const absolutePosition = isActiveBoot ? activeBoatsBeforeThis + 1 : null;
                   
-                  const medals = ['🥇', '🥈', '🥉'];
-                  const medal = absolutePosition && absolutePosition <= 3 ? medals[absolutePosition - 1] : null;
+                  const medal = absolutePosition && absolutePosition <= 3 ? MEDALS[absolutePosition - 1] : null;
                   
                   const isPenalty = boatPenalties[boatId];
                   const isEditing = selectedBoatInZiel === boatId;
@@ -3471,21 +3263,20 @@ export default function RegattaApp() {
                                       const newOrder = zielBoats.filter(id => id !== boatId);
                                       
                                       // Find position: after active boats, sorted by penalty
-                                      const penaltyOrder = ['DNF', 'DNS', 'DNC', 'DSQ'];
                                       const penaltyBoats = newOrder.filter(id => boatPenalties[id]);
                                       const activeBoats = newOrder.filter(id => !boatPenalties[id]);
-                                      
+
                                       // Insert in correct penalty position
                                       const insertIndex = activeBoats.length + penaltyBoats.filter(id => {
                                         const otherPenalty = boatPenalties[id];
-                                        return penaltyOrder.indexOf(otherPenalty) < penaltyOrder.indexOf(val);
+                                        return (PENALTY_ORDER[otherPenalty] ?? 99) < (PENALTY_ORDER[val] ?? 99);
                                       }).length;
                                       
                                       newOrder.splice(insertIndex, 0, boatId);
                                       setZielBoats(newOrder);
                                       
                                       // Autosave
-                                      setTimeout(() => autoSaveZielerfassung(newOrder, newPenalties), 100);
+                                      setTimeout(() => autoSaveZielerfassung(newOrder, newPenalties), UI.SCROLL_DELAY);
                                       
                                     } else if (type === 'position') {
                                       // Clear penalty and move to position
@@ -3500,7 +3291,7 @@ export default function RegattaApp() {
                                       setZielBoats(newOrder);
                                       
                                       // Autosave
-                                      setTimeout(() => autoSaveZielerfassung(newOrder, newPenalties), 100);
+                                      setTimeout(() => autoSaveZielerfassung(newOrder, newPenalties), UI.SCROLL_DELAY);
                                     }
                                   }}
                                   onClick={(e) => e.stopPropagation()}
@@ -3521,10 +3312,13 @@ export default function RegattaApp() {
                                     })()}
                                   </optgroup>
                                   <optgroup label="Penalty Codes">
-                                    <option value="penalty:DNF">DNF - Did Not Finish</option>
-                                    <option value="penalty:DNS">DNS - Did Not Start</option>
-                                    <option value="penalty:DNC">DNC - Did Not Compete</option>
-                                    <option value="penalty:DSQ">DSQ - Disqualified</option>
+                                    <option value={`penalty:${PENALTY_CODES.DNF}`}>DNF - Did Not Finish</option>
+                                    <option value={`penalty:${PENALTY_CODES.DNS}`}>DNS - Did Not Start</option>
+                                    <option value={`penalty:${PENALTY_CODES.DNC}`}>DNC - Did Not Compete</option>
+                                    <option value={`penalty:${PENALTY_CODES.DSQ}`}>DSQ - Disqualified</option>
+                                    <option value={`penalty:${PENALTY_CODES.OCS}`}>OCS - Frühstart</option>
+                                    <option value={`penalty:${PENALTY_CODES.BFD}`}>BFD - Black Flag</option>
+                                    <option value={`penalty:${PENALTY_CODES.RET}`}>RET - Retired</option>
                                   </optgroup>
                                 </select>
                                 <button
@@ -3559,7 +3353,6 @@ export default function RegattaApp() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Remove button clicked for boat:', boatId, boat.segelnummer);
                               removeBoatFromZiel(boatId);
                             }}
                             className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
@@ -3681,7 +3474,7 @@ export default function RegattaApp() {
       <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
           <button
-            onClick={() => setCurrentView('wettfahrtenOverview')}
+            onClick={() => setCurrentView(VIEWS.WETTFAHRTEN_OVERVIEW)}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
           >
             <ChevronLeft size={20} />
@@ -3757,102 +3550,26 @@ export default function RegattaApp() {
     );
   };
 
-  // Custom Confirm Dialog Component
-  const ConfirmDialog = () => {
-    if (!confirmDialog.show) return null;
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Bestätigung</h3>
-          <p className="text-gray-700 mb-6">{confirmDialog.message}</p>
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => setConfirmDialog({ show: false, message: '', onConfirm: null })}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-            >
-              Abbrechen
-            </button>
-            <button
-              onClick={confirmDialog.onConfirm}
-              className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-            >
-              Löschen
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Bottom Navigation Component
-  const BottomNav = () => {
-    const navItems = [
-      { id: 'organisation', icon: Edit2, label: 'Organisation', views: ['overview', 'createRegatta', 'editRegatta', 'regattaDetail', 'editBoat'] },
-      { id: 'wertung', icon: Trophy, label: 'Wertung', views: ['wertung', 'wettfahrtenOverview', 'editWettfahrt', 'zielerfassung', 'ergebnisseView'] },
-    ];
-
-    // Bestimme aktiven Tab basierend auf currentView
-    const activeItem = navItems.find(item => item.views.includes(currentView)) || navItems[0];
-
-    return (
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-inset-bottom">
-        <div className="flex justify-around items-center" style={{ height: '64px' }}>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeItem.id === item.id;
-            
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveNavItem(item.id);
-                  if (item.id === 'organisation') {
-                    setCurrentView('overview');
-                  } else if (item.id === 'wertung') {
-                    setCurrentView('wertung');
-                  }
-                }}
-                className={`flex flex-col items-center justify-center flex-1 h-full transition-colors relative ${
-                  isActive ? 'text-blue-600' : 'text-gray-600'
-                }`}
-                style={{ minWidth: '44px', minHeight: '44px' }}
-              >
-                <Icon size={24} strokeWidth={isActive ? 2.5 : 2} className="mb-1" />
-                <span className={`text-xs ${isActive ? 'font-semibold' : 'font-normal'}`}>
-                  {item.label}
-                </span>
-                {isActive && (
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-blue-600 rounded-b"></div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   // Main Render
   return (
     <div className="font-sans">
-      <ConfirmDialog />
-      <PullToRefreshIndicator />
+      <ConfirmDialog confirmDialog={confirmDialog} setConfirmDialog={setConfirmDialog} />
+      <PullToRefreshIndicator pullToRefreshDistance={pullToRefreshDistance} isRefreshing={isRefreshing} />
       {/* Content Wrapper mit Bottom Padding für Bottom Nav */}
       <div className="pb-16">
-        {currentView === 'overview' && renderOverview()}
-        {currentView === 'createRegatta' && renderRegattaForm(false)}
-        {currentView === 'editRegatta' && renderRegattaForm(true)}
-        {currentView === 'regattaDetail' && renderRegattaDetail()}
-        {currentView === 'editBoat' && renderEditBoat()}
-        {currentView === 'wertung' && renderWertungOverview()}
-        {currentView === 'wettfahrtenOverview' && renderWettfahrtenOverview()}
-        {currentView === 'editWettfahrt' && renderEditWettfahrt()}
-        {currentView === 'zielerfassung' && renderZielerfassung()}
-        {currentView === 'ergebnisseView' && renderErgebnisse()}
+        {currentView === VIEWS.OVERVIEW && renderOverview()}
+        {currentView === VIEWS.CREATE_REGATTA && renderRegattaForm(false)}
+        {currentView === VIEWS.EDIT_REGATTA && renderRegattaForm(true)}
+        {currentView === VIEWS.REGATTA_DETAIL && renderRegattaDetail()}
+        {currentView === VIEWS.EDIT_BOAT && renderEditBoat()}
+        {currentView === VIEWS.WERTUNG && renderWertungOverview()}
+        {currentView === VIEWS.WETTFAHRTEN_OVERVIEW && renderWettfahrtenOverview()}
+        {currentView === VIEWS.EDIT_WETTFAHRT && renderEditWettfahrt()}
+        {currentView === VIEWS.ZIELERFASSUNG && renderZielerfassung()}
+        {currentView === VIEWS.ERGEBNISSE && renderErgebnisse()}
       </div>
       {/* Bottom Navigation (nur Mobile) */}
-      <BottomNav />
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} setActiveNavItem={setActiveNavItem} />
     </div>
   );
 }
